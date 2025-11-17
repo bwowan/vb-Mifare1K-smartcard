@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nfc-reader"
+version = "0.1.0"
+description = "NFC/RFID reader utilities using pyscard"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Vladimir Balabanov", email = "vladimir.balabanov@gmail.com" }]
+
+dependencies = ["pyscard @ git+https://github.com/LudovicRousseau/pyscard.git"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+nfc-read = "nfc_reader.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
