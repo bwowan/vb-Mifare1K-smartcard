@@ -1,29 +1,43 @@
 ## nfc-reader
 
-Современный Python-проект для работы с USB NFC/RFID-картридером на базе библиотеки
-[`pyscard`](https://github.com/LudovicRousseau/pyscard).
+Modern Python project for working with USB NFC/RFID card readers based on the
+[`pyscard`](https://github.com/LudovicRousseau/pyscard) library.
 
-### Установка
+### Installation
 
+```bash
 python -m pip install .
-# или для разработки
-python -m pip install .[dev]### Зависимости
+# or for development
+python -m pip install .[dev]
+```
 
-- `pyscard` загружается автоматически из GitHub:
+### Dependencies
 
-pyscard @ git+https://github.com/LudovicRousseau/pyscard.gitОфициальная документация: [pyscard user guide](https://pyscard.sourceforge.io/user-guide.html#pyscard-user-guide).
+- `pyscard` is automatically loaded from GitHub:
 
-### Использование
+```
+pyscard @ git+https://github.com/LudovicRousseau/pyscard.git
+```
 
-После установки доступна консольная команда:
+Official documentation: [pyscard user guide](https://pyscard.sourceforge.io/user-guide.html#pyscard-user-guide).
 
-nfc-readКоманда запускает ожидание NFC-карты и выводит дамп первой секции MIFARE 1K
-(логика реализована в `src/nfc_reader/mifare.py`, основана на коде `nfc_read.py`).
+### Usage
 
-### Разработка
+After installation, a console command is available:
 
+```bash
+nfc-read
+```
+
+The command starts waiting for an NFC card and outputs a dump of the first MIFARE 1K sector
+(logic is implemented in `src/nfc_reader/do_card.py`, based on code from `nfc_read.py`).
+
+### Development
+
+```bash
 python -m pip install .[dev]
 ruff check src tests
-pytestПроект включает GitHub Actions workflow для проверки линтера и тестов при каждом push/pull request.
+pytest
+```
 
-
+The project includes a GitHub Actions workflow for checking the linter and tests on every push/pull request.
