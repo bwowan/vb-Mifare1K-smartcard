@@ -28,6 +28,7 @@ from nfc_reader.do_prompt import (
     askConfirmWrite_FromTerminal,
     askTextData_FromTerminal,
     askHexData_FromTerminal,
+    askKey_FromTerminal,
     fnAskWrite,
 )
 
@@ -380,6 +381,256 @@ class TestFnAskWrite:
         assert answer.dataType == writeDatType.W_RAND
         assert answer.address == writeAddress.A_SECTOR
         assert len(answer.data) == 16 * 3  # nBlockSize * (nBlockCount - 1)
+
+
+class TestAskKey_FromTerminal:
+    """Test askKey_FromTerminal function."""
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_success_key_a(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with Key A and valid hex data."""
+        mock_get_user_input.return_value = "A"
+        mock_input.return_value = "12 34 56 78 9A BC"
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "A"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_success_key_b(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with Key B and valid hex data."""
+        mock_get_user_input.return_value = "B"
+        mock_input.return_value = "FF EE DD CC BB AA"
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "B"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_default_key(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with default key (empty input)."""
+        mock_get_user_input.return_value = "B"
+        mock_input.return_value = ""  # Empty input uses default
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "B"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0xFF] * 6)  # Default key
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_hex_without_spaces(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with hex data without spaces."""
+        mock_get_user_input.return_value = "A"
+        mock_input.return_value = "123456789ABC"  # Without spaces
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "A"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('builtins.print')
+    def test_askKey_FromTerminal_invalid_key_type(self, mock_print, mock_get_user_input):
+        """Test askKey_FromTerminal with invalid key type."""
+        mock_get_user_input.return_value = ""  # Empty or invalid
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is False  # When False, do not check other tuple values
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    @patch('builtins.print')
+    def test_askKey_FromTerminal_invalid_length(self, mock_print, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with invalid key length."""
+        mock_get_user_input.return_value = "A"
+        mock_input.side_effect = ["12 34 56", ""]  # First invalid, then default
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True  # Second attempt (empty) uses default key
+        assert keyType == "A"
+        assert len(keyData) == 6 and all(b == 0xFF for b in keyData)
+        assert mock_input.call_count == 2
+        mock_print.assert_called()  # Error printed on first invalid
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    @patch('builtins.print')
+    def test_askKey_FromTerminal_invalid_hex_format(self, mock_print, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with invalid hex format."""
+        mock_get_user_input.return_value = "B"
+        mock_input.side_effect = ["GH IJ KL MN OP QR", "12 34 56 78 9A BC"]  # Invalid, then valid
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True  # Second attempt succeeds
+        assert keyType == "B"
+        assert len(keyData) == 6
+        mock_print.assert_called()
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_cancelled(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with cancellation event."""
+        mock_get_user_input.return_value = "A"
+        mock_input.return_value = "12 34 56 78 9A BC"
+        cancelEvent = threading.Event()
+        cancelEvent.set()  # Set cancellation event
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is False  # When False, do not check other tuple values
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_different_key_length(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with different key length."""
+        mock_get_user_input.return_value = "B"
+        mock_input.return_value = "11 22 33 44"
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(4, cancelEvent)
+        
+        assert success is True
+        assert keyType == "B"
+        assert len(keyData) == 4
+        assert keyData == bytearray([0x11, 0x22, 0x33, 0x44])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_retry_on_invalid(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal retries on invalid input."""
+        mock_get_user_input.return_value = "A"
+        mock_input.side_effect = ["INVALID", "12 34 56 78 9A BC"]  # First invalid, then valid
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "A"
+        assert len(keyData) == 6
+        assert mock_input.call_count == 2  # Called twice due to retry
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_key_too_long(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with key data longer than required."""
+        mock_get_user_input.return_value = "B"
+        mock_input.side_effect = ["12 34 56 78 9A BC DE F0", "12 34 56 78 9A BC"]  # Too long, then correct
+        cancelEvent = threading.Event()
+        
+        with patch('builtins.print'):
+            success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True  # Second attempt succeeds
+        assert keyType == "B"
+        assert len(keyData) == 6
+        assert mock_input.call_count == 2
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_key_with_underscores(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with hex data containing underscores."""
+        mock_get_user_input.return_value = "A"
+        mock_input.return_value = "12_34_56_78_9A_BC"  # With underscores
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "A"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_lowercase_hex(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with lowercase hex input."""
+        mock_get_user_input.return_value = "B"
+        mock_input.return_value = "ab cd ef 01 23 45"  # Lowercase hex
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "B"
+        assert len(keyData) == 6
+        assert keyData == bytearray([0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45])
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_cancelled_during_key_input(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal when cancelled during key data input."""
+        mock_get_user_input.return_value = "A"
+        cancelEvent = threading.Event()
+        # Simulate cancellation during key input
+        def side_effect(*args):
+            cancelEvent.set()
+            return ""
+        mock_input.side_effect = side_effect
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is False  # When False, do not check other tuple values
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    @patch('builtins.print')
+    def test_askKey_FromTerminal_retry_on_wrong_length(self, mock_print, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal retries when key length is wrong."""
+        mock_get_user_input.return_value = "B"
+        # First input too short, second correct
+        mock_input.side_effect = ["12 34 56", "12 34 56 78 9A BC"]
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "B"
+        assert len(keyData) == 6
+        assert mock_input.call_count == 2
+        mock_print.assert_called()  # Error message printed
+    
+    @patch('nfc_reader.do_prompt.getUserInput')
+    @patch('nfc_reader.do_prompt.fnInputString_FromTerminal_WithCancellation')
+    def test_askKey_FromTerminal_mixed_case_key_type(self, mock_input, mock_get_user_input):
+        """Test askKey_FromTerminal with mixed case key type input.
+        
+        Note: getUserInput() converts input to uppercase, so mock should return
+        uppercase value to reflect actual behavior.
+        """
+        # getUserInput() does .upper(), so mock should return uppercase
+        mock_get_user_input.return_value = "A"  # Already uppercase after getUserInput processing
+        mock_input.return_value = "12 34 56 78 9A BC"
+        cancelEvent = threading.Event()
+        
+        success, keyType, keyData = askKey_FromTerminal(6, cancelEvent)
+        
+        assert success is True
+        assert keyType == "A"  # Should be uppercase
+        assert len(keyData) == 6
 
 
 if __name__ == "__main__":

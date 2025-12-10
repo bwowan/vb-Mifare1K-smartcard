@@ -1,4 +1,3 @@
-from pluggy import Result
 from smartcard.CardConnection import CardConnection
 
 def bytes2str(b) -> str:
@@ -139,7 +138,7 @@ def fnWriteBlock(connection: CardConnection, nBlockThrowCard: int, data: list[by
         print(f"fail to write block: {nBlockThrowCard//4}:{nBlockThrowCard%4}")
     return Result
 
-def fnReadBlock(connection: CardConnection, nBlockThrowCard: int):
+def fnReadBlock(connection: CardConnection, nBlockThrowCard: int) -> (bool, list[bytes]):
     """
     Read data from a block on the MIFARE card.
     

@@ -3,9 +3,9 @@ import smartcard.scard
 from smartcard.CardRequest import CardRequest
 from smartcard.CardConnection import CardConnection
 
-import do_comm
 import card_data
 import do_prompt
+import do_comm
 
 def printFailBlocks(nSector: int, sector: card_data.dumpMifare_1k.sector):
     failBlocks = []
@@ -17,7 +17,7 @@ def printFailBlocks(nSector: int, sector: card_data.dumpMifare_1k.sector):
         
 ############################################################################################################
 #read all card info
-def fnRead(dump: card_data.dumpMifare_1k, connection: CardConnection, key: card_data.key) -> bool:
+def fnRead(connection: CardConnection, dump: card_data.dumpMifare_1k, key: card_data.key) -> bool:
     totalBlocksToRead = len(dump.sectors) * len(dump.sectors[0].blocks)
     totalFailCount    = 0
     totalBlocksRead   = 0
@@ -59,7 +59,7 @@ def fnRead(dump: card_data.dumpMifare_1k, connection: CardConnection, key: card_
 
 
 ############################################################################################################
-def fnWriteBlock(nSector: int, nBlock: int, blockData: list[bytes], key: list[bytes]):
+def fnWriteBlock(nSector: int, nBlock: int, blockData: list[bytes], key: list[bytes]) -> bool:
     Result = False
     try:
         request = CardRequest(timeout=10)
@@ -84,7 +84,7 @@ def fnWriteBlockStr(nSector: int, nBlock: int, blockDataStr: str, key: list[byte
     return fnWriteBlock(nSector, nBlock, list(blockDataStr.encode()), key)
 
 #==============================================================================================
-def fnWrite(writeData: do_prompt.PromptAnswer_ForWrite, connection: CardConnection, key:card_data.key) -> bool:
+def fnWrite(connection: CardConnection, writeData: do_prompt.PromptAnswer_ForWrite, key:card_data.key) -> bool:
     """
     Write data to a MIFARE 1K card.
     

@@ -7,6 +7,7 @@ import threading
 
 class actions(Enum):
     A_READ           = "read card"
+    A_READ_KEY       = "read key"
     A_PRINT_ALL      = "print all data"
     A_PRINT_SECTOR   = "print single sector"
     A_WRITE          = "write block interactively"
@@ -140,18 +141,18 @@ def clearScreen():
 
 def getUserInput(prompt: str, checkRange, cancelEvent: threading.Event) -> str:
     while True:
-        userInput = fnInputString_FromTerminal_WithCancellation(prompt, cancelEvent).strip().upper()
-        if userInput in checkRange:
-            return userInput
+        inputStr = fnInputString_FromTerminal_WithCancellation(prompt, cancelEvent).strip().upper()
+        if len(inputStr) == 0  or  inputStr in checkRange: #break or correct input
+            return inputStr
         else:
             print(f"Invalid input. Please input:{checkRange}")
 
 
 def askNumber_FromTerminal(nMin: int, nMax: int, sPrompt: str, cancelEvent: threading.Event) -> (bool, int):
     numbers = [str(i) for i in range(nMin, nMax + 1)]
-    sInput = getUserInput(sPrompt + f"({nMin}-{nMax}): ", numbers, cancelEvent).strip()
-    if len(sInput) != 0  and  sInput.isdigit():
-        return True, int(sInput)
+    inputStr = getUserInput(sPrompt + f"({nMin}-{nMax}): ", numbers, cancelEvent).strip()
+    if len(inputStr) != 0  and  inputStr.isdigit():
+        return True, int(inputStr)
     return False, -1
 
 def askSectorNumber_FromTerminal(nSectorCount: int, cancelEvent: threading.Event) -> (bool, int):
@@ -161,7 +162,8 @@ def askBlockNumber_FromTerminal(sector: int, nBlockCount: int, cancelEvent: thre
     return askNumber_FromTerminal(1 if sector==0 else 0, nBlockCount - 2, "Enter block number", cancelEvent)
 
 def askConfirmWrite_FromTerminal(sPrompt: str, cancelEvent: threading.Event) -> bool:
-    return 'Y' == getUserInput(f"{sPrompt} (Yes/No): ", ['Y', 'YES', 'N', 'NO'], cancelEvent).strip().upper()[0]
+    inputStr = getUserInput(f"{sPrompt} (Yes/No): ", ['Y', 'YES', 'N', 'NO'], cancelEvent).strip().upper()
+    return len(inputStr) != 0  and  inputStr[0] == 'Y'
 
 def askTextData_FromTerminal(nBlockSize: int, cancelEvent: threading.Event) -> str:
     dataText = fnInputString_FromTerminal_WithCancellation("Enter text string (e.g. hello world): ",
@@ -192,6 +194,34 @@ def askHexData_FromTerminal(nBlockSize: int, cancelEvent: threading.Event) -> by
         padding = nBlockSize - len(dataBinary) % nBlockSize
         return dataBinary if padding == 0 else dataBinary + bytearray(padding)
     return dataBinary
+
+#return key type: "A" or "B",  list[bytes] - 6 bytes of key data
+def askKey_FromTerminal(keyLength: int, cancelEvent: threading.Event) -> (bool, str, list[bytes]):
+    # Ask for key type (A or B, default: B)
+    keyDataBytes = bytearray(0)
+    keyTypeStr = getUserInput("Enter key type (A or B): ", ['A','B'], cancelEvent)
+    if len(keyTypeStr) == 1:
+        n = 0
+        while len(keyDataBytes) != keyLength  and  not cancelEvent.is_set():
+            n += 1
+            if n > 4:
+                return False, "", []
+            keyDataStr = fnInputString_FromTerminal_WithCancellation(
+                f"Enter key ({keyLength} hex bytes (e.g. A3 95 E7 45 00 98), press Enter for default): {'FF ' * keyLength}",
+                cancelEvent
+            ).strip().upper()
+            if not cancelEvent.is_set():
+                if len(keyDataStr) == 0:
+                    keyDataBytes = bytearray([0xFF] * keyLength)
+                else:
+                    try:
+                        keyDataBytes = bytearray.fromhex(keyDataStr.replace("_", " ").replace(",", " "))
+                        if len(keyDataBytes) != keyLength:
+                            print(f"Invalid key length. Key must be {keyLength} hex bytes.")
+                    except ValueError:
+                        print("Invalid hexadecimal format. Use only 0-9, A-F characters. Try again or press Ctrl+C to cancel.")
+
+    return len(keyDataBytes) == keyLength, keyTypeStr, keyDataBytes
 
 
 #=========================================================================================================
@@ -254,6 +284,7 @@ def fnAskWrite(nSectorCount: int, nBlockCount: int, nBlockSize: int, cancelEvent
     return False, None
 
 if __name__ == "__main__":
+    print(askKey_FromTerminal(6, threading.Event()))
     isOk, answer = fnAskWrite(16, 4, 16, threading.Event())
     if isOk:
         print(f"Selected: {answer.dataType.value} --> {answer.address.value} [{answer.nSector}:{answer.nBlock}]")

@@ -64,7 +64,7 @@ class keyType(Enum):
     KT_B = "B"
 
 class key:
-    def __init__(self, kType = keyType.KT_A, kData: list[bytes] = MIFARE_1K_default_key):
+    def __init__(self, kType = keyType.KT_B, kData: list[bytes] = MIFARE_1K_default_key):
         self.keyType = kType
         self.keyData = kData
 

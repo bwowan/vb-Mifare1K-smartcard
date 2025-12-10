@@ -6,7 +6,6 @@ import smartcard.System
 from enum                      import Enum
 from smartcard.CardRequest     import CardRequest
 from smartcard.CardMonitoring  import CardMonitor, CardObserver
-from smartcard.CardConnection  import CardConnection
 
 import card_data
 import do_prompt
@@ -33,8 +32,11 @@ class BackgroundInputProcessor:
         self.inputThread = None 
         self.resultQueue = queue.Queue(maxsize=1)
         self.cancelEvent = threading.Event()
-        self.lock = threading.Lock()  
-        
+        self.lock        = threading.Lock()  
+        self.key         = card_data.key() #default Key B:FFFFFFFFFFFF for card operations
+        self.writeData   = do_prompt.PromptAnswer_ForWrite()
+        self.nSector     = -1
+
     #Start input thread, cancelling previous one if exists.
     def start(self) -> None:
         with self.lock:
@@ -48,12 +50,32 @@ class BackgroundInputProcessor:
             self.inputThread = threading.Thread(target=self.process, daemon=True)
             self.inputThread.start()
     
-    #thread function for input processing.
+    #thread function for input processing from terminal in background thread.
+    #this need to interruptible input from terminal when card is removed
     def process(self) -> None:
         try:
             action = do_prompt.fnPromptUserAction_FromTerminal(self.cancelEvent)
+            isOk = True
+            match action:
+                case do_prompt.actions.A_READ_KEY:
+                    isOk, keyType, keyData = do_prompt.askKey_FromTerminal(card_data.MIFARE_1K_bytes_per_key, self.cancelEvent)
+                    if isOk:
+                        self.key = card_data.key(keyType, keyData)
+
+                case do_prompt.actions.A_PRINT_SECTOR:
+                    isOk, self.nSector = do_prompt.askSectorNumber_FromTerminal(card_data.MIFARE_1K_total_sectors, self.cancelEvent)
+
+                case do_prompt.actions.A_WRITE:
+                    isOk, self.writeData = do_prompt.fnAskWrite(card_data.MIFARE_1K_total_sectors,
+                                                                card_data.MIFARE_1K_blocks_per_sector,
+                                                                card_data.MIFARE_1K_bytes_per_block,
+                                                                self.cancelEvent)
+
+            if not isOk  or  self.cancelEvent.is_set():
+                action = do_prompt.actions.A_READ # start waiting card insertion
             self.resultQueue.put(action)
         except Exception as e:
+            print(f"{e}")
             self.resultQueue.put(do_prompt.actions.A_QUIT)
 
     
@@ -84,7 +106,7 @@ class CardProcessor():
         def __init__(self) -> None:
             self.sectorIndex = -1
             self.blockIndex  = -1
-            self.key         = card_data.MIFARE_1K_default_key
+            #self.key         = card_data.MIFARE_1K_default_key
             self.blockData   = bytearray(card_data.MIFARE_1K_bytes_per_block)
 
     class LocalCardObeserver(CardObserver):
@@ -132,7 +154,7 @@ class CardProcessor():
         self.responceQueue.put(actResponce.fromBool(isOkResult))
 
 
-    #main service thread loop
+    #main service thread loop for card operations
     def process(self) -> None: #loop of main thread
         try:
             doContinue = True
@@ -146,10 +168,10 @@ class CardProcessor():
                         self.responceQueue.put(actResponce.A_RESPONCE_OK)
 
                     case do_prompt.actions.A_READ:
-                        self.executeCommunication(lambda conn: do_wr.fnRead(self.dump, conn, self.key))
+                        self.executeCommunication(lambda conn: do_wr.fnRead (conn, self.dump, self.observer.inputProcessor.key))
 
                     case do_prompt.actions.A_WRITE:
-                        self.executeCommunication(lambda conn: do_wr.fnWrite(self.writeData, conn, self.key))
+                        self.executeCommunication(lambda conn: do_wr.fnWrite(conn, self.observer.inputProcessor.writeData, self.observer.inputProcessor.key))
 
                 self.messageQueue.task_done()
         except Exception as e:
@@ -163,8 +185,6 @@ class CardProcessor():
         self.dataToProcess    = CardProcessor.processData()
         self.cardInsertedEvent= threading.Event()
         self.selfTask         = threading.Thread(target=self.process, daemon=True)
-        self.writeData        = do_prompt.PromptAnswer_ForWrite()
-        self.key              = card_data.key(card_data.keyType.KT_B)
         self.observer         = CardProcessor.LocalCardObeserver(self.cardInsertedEvent)
 
 #waiting while ervice thread process it's queue
@@ -217,15 +237,17 @@ if __name__ == "__main__":
                             if fnWaitForResponce(mainCardProcessor.responceQueue):
                                 card_data.printSector(0, mainCardProcessor.dump.sectors[0])
 
+                        case do_prompt.actions.A_READ_KEY:
+                            pass #already read key from terminal in background thread
+
                         case do_prompt.actions.A_PRINT_SECTOR:
-                            isOk, nSector = do_prompt.askSectorNumber_FromTerminal(card_data.MIFARE_1K_total_sectors)
-                            isOk and card_data.printSector(nSector, mainCardProcessor.dump.sectors[nSector])
+                            nSector = mainCardProcessor.observer.inputProcessor.nSector
+                            if nSector >= 0 and nSector < card_data.MIFARE_1K_total_sectors:
+                                card_data.printSector(nSector, mainCardProcessor.dump.sectors[nSector])
+                            else:
+                                print("Invalid sector number")
 
                         case do_prompt.actions.A_WRITE:
-                            isOk, mainCardProcessor.writeData = do_prompt.fnAskWrite(card_data.MIFARE_1K_total_sectors,
-                                                                                     card_data.MIFARE_1K_blocks_per_sector,
-                                                                                     card_data.MIFARE_1K_bytes_per_block)
-                            if isOk:
                                 mainCardProcessor.messageQueue.put(do_prompt.actions.A_WRITE)
                                 fnWaitForResponce(mainCardProcessor.responceQueue)
 
